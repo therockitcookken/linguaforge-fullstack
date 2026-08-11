@@ -55,74 +55,33 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
         }
       }
     } catch (e) {
-      console.warn("API fallback for dictionary", e);
-      if (lang === 'zh') {
-        const fallbackZh = [
-          {
-            id: 1, term: '安全', pinyin: 'ānquán', pos: 'noun/adj', level: 'HSK3', topic: 'safety', meaning_vi: 'an toàn', provenance: 'provenance_hsk_factory_2026',
-            synonyms: [{ term: '平安', pinyin: "píng'ān", meaning_vi: 'bình an, an toàn' }],
-            antonyms: [{ term: '危险', pinyin: 'wēixiǎn', meaning_vi: 'nguy hiểm' }],
-            examples: [{ id: 1, sentence: '车间安全是第一位的。', pinyin: 'Chējiān ānquán shì dì yī wèi de.', translation_vi: 'An toàn nhà xưởng là ưu tiên hàng đầu.' }]
-          },
-          {
-            id: 2, term: '质量', pinyin: 'zhìliàng', pos: 'noun', level: 'HSK3', topic: 'qc', meaning_vi: 'chất lượng', provenance: 'provenance_hsk_factory_2026',
-            synonyms: [{ term: '质检', pinyin: 'zhìjiǎn', meaning_vi: 'kiểm tra chất lượng' }],
-            antonyms: [{ term: '劣质', pinyin: 'lièzhì', meaning_vi: 'chất lượng kém' }],
-            examples: [{ id: 2, sentence: '我们需要提高产品质量。', pinyin: 'Wǒmen xūyào tígāo chǎnpǐn zhìliàng.', translation_vi: 'Chúng ta cần nâng cao chất lượng sản phẩm.' }]
-          },
-          {
-            id: 3, term: '检查', pinyin: 'jiǎnchá', pos: 'verb', level: 'HSK3', topic: 'qc', meaning_vi: 'kiểm tra', provenance: 'provenance_hsk_factory_2026',
-            synonyms: [{ term: '检验', pinyin: 'jiǎnyàn', meaning_vi: 'kiểm nghiệm' }],
-            antonyms: [{ term: '忽略', pinyin: 'hūlüè', meaning_vi: 'bỏ sót, ngó lơ' }],
-            examples: [{ id: 3, sentence: 'QC组正在检查样品。', pinyin: 'QC zǔ zhèngzài jiǎnchá yàngpǐn.', translation_vi: 'Tổ QC đang kiểm tra mẫu.' }]
-          },
-          {
-            id: 4, term: '维护', pinyin: 'wéihù', pos: 'verb/noun', level: 'HSK4', topic: 'maintenance', meaning_vi: 'bảo trì', provenance: 'provenance_hsk_factory_2026',
-            synonyms: [{ term: '保养', pinyin: 'bǎoyǎng', meaning_vi: 'bảo dưỡng' }],
-            antonyms: [{ term: '破坏', pinyin: 'pòhuài', meaning_vi: 'phá hỏng' }],
-            examples: [{ id: 4, sentence: '保养员每周维护设备。', pinyin: 'Bǎoyǎngyuán měizhōu wéihù shèbèi.', translation_vi: 'Nhân viên bảo dưỡng bảo trì thiết bị hàng tuần.' }]
-          },
-          {
-            id: 5, term: '仓库', pinyin: 'cāngkù', pos: 'noun', level: 'HSK3', topic: 'warehouse', meaning_vi: 'kho hàng', provenance: 'provenance_hsk_factory_2026',
-            synonyms: [{ term: '货仓', pinyin: 'huòcāng', meaning_vi: 'kho hàng hóa' }],
-            antonyms: [],
-            examples: [{ id: 5, sentence: '原材料已盘点完毕存入仓库。', pinyin: 'Yuáncáiliào yǐ pándiǎn wánbì cúnrù cāngkù.', translation_vi: 'Nguyên vật liệu đã kiểm kê xong và nạp vào kho.' }]
-          },
-          {
-            id: 6, term: '交接', pinyin: 'jiāojiē', pos: 'verb', level: 'HSK4', topic: 'office', meaning_vi: 'bàn giao', provenance: 'provenance_hsk_factory_2026',
-            synonyms: [{ term: '移交', pinyin: 'yíjiāo', meaning_vi: 'di chuyển bàn giao' }],
-            antonyms: [],
-            examples: [{ id: 6, sentence: '早班和晚班顺利完成交接。', pinyin: 'Zǎobān hé wǎnbān shùnlì wánchéng jiāojiē.', translation_vi: 'Ca sáng và ca tối đã hoàn thành bàn giao suôn sẻ.' }]
+      console.warn("API fallback for dictionary -> loading local static JSON dataset", e);
+      try {
+        const staticUrl = lang === 'zh' ? '/data/chinese_lexicon_10k.json' : '/data/english_lexicon_10k.json';
+        const res = await fetch(staticUrl);
+        if (res.ok) {
+          const allData: any[] = await res.json();
+          const qLower = query.trim().toLowerCase();
+
+          let filtered = allData.filter((item: any) => {
+            const matchTopic = selectedTopic === 'all' || item.topic === selectedTopic;
+            const termMatch = (item.term || item.hanzi || '').toLowerCase().includes(qLower);
+            const pinyinMatch = (item.pinyin || item.ipa || '').toLowerCase().includes(qLower);
+            const meaningMatch = (item.meaning_vi || '').toLowerCase().includes(qLower);
+            return matchTopic && (termMatch || pinyinMatch || meaningMatch);
+          });
+
+          if (activeTab === 'two_hanzi' && lang === 'zh') {
+            const twoHanzi = filtered.filter((item: any) => (item.term || item.hanzi || '').length === 2);
+            setTwoHanziWords(twoHanzi.slice(0, 100));
+            setTotalCount(twoHanzi.length);
+          } else {
+            setWords(filtered.slice(0, 100));
+            setTotalCount(filtered.length);
           }
-        ];
-        setWords(fallbackZh);
-        setTwoHanziWords(fallbackZh.map(item => ({
-          id: item.id, hanzi: item.term, pinyin: item.pinyin, meaning_vi: item.meaning_vi, topic: item.topic, hsk_level: item.level, provenance: item.provenance
-        })));
-        setTotalCount(fallbackZh.length);
-      } else {
-        const fallbackEn = [
-          {
-            id: 10, term: 'inspection', ipa: '/ɪnˈspekʃn/', pos: 'noun', level: 'B1', topic: 'qc', meaning_vi: 'sự kiểm tra chất lượng', provenance: 'provenance_cefr_factory_2026',
-            synonyms: [{ term: 'examination', ipa: '/ɪɡˌzæmɪˈneɪʃn/', meaning_vi: 'sự xem xét/kiểm tra' }],
-            antonyms: [{ term: 'neglect', ipa: '/nɪˈɡlekt/', meaning_vi: 'sự bỏ sót' }],
-            examples: [{ id: 10, sentence: 'Quality inspection is required before shipment.', translation_vi: 'Cần kiểm tra chất lượng trước khi giao hàng.' }]
-          },
-          {
-            id: 11, term: 'maintenance', ipa: '/ˈmeɪntənəns/', pos: 'noun', level: 'B2', topic: 'maintenance', meaning_vi: 'bảo trì, bảo dưỡng', provenance: 'provenance_cefr_factory_2026',
-            synonyms: [{ term: 'servicing', ipa: '/ˈsɜːvɪsɪŋ/', meaning_vi: 'sự bảo dưỡng' }],
-            antonyms: [{ term: 'damage', ipa: '/ˈdæmɪdʒ/', meaning_vi: 'sự phá hỏng' }],
-            examples: [{ id: 11, sentence: 'The machine needs urgent maintenance.', translation_vi: 'Cỗ máy cần bảo trì gấp.' }]
-          },
-          {
-            id: 12, term: 'inventory', ipa: '/ˈɪnvəntri/', pos: 'noun', level: 'B1', topic: 'warehouse', meaning_vi: 'hàng tồn kho / kiểm kê', provenance: 'provenance_cefr_factory_2026',
-            synonyms: [{ term: 'stock', ipa: '/stɒk/', meaning_vi: 'hàng trong kho' }],
-            antonyms: [],
-            examples: [{ id: 12, sentence: 'Warehouse staff updated the inventory list.', translation_vi: 'Nhân viên kho đã cập nhật danh sách kiểm kê.' }]
-          }
-        ];
-        setWords(fallbackEn);
-        setTotalCount(fallbackEn.length);
+        }
+      } catch (err) {
+        console.error("Failed to load static lexicon dataset", err);
       }
     } finally {
       setLoading(false);
