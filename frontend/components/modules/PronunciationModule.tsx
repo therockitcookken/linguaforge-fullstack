@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Volume2, Mic, Play, RotateCcw, Bookmark, Sparkles, CheckCircle2 } from 'lucide-react';
 import { uiSound } from '@/lib/sound';
 import { useAppStore } from '@/lib/store';
+import { API_BASE } from '@/lib/api';
 
 export default function PronunciationModule({ lang }: { lang: 'zh' | 'en' }) {
   const [data, setData] = useState<any[]>([]);
@@ -23,13 +24,12 @@ export default function PronunciationModule({ lang }: { lang: 'zh' | 'en' }) {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/pronunciation/${lang}`);
+      const res = await fetch(`${API_BASE}/api/pronunciation/${lang}`);
       const json = await res.json();
       setData(json);
       if (json.length > 0) setActiveItem(json[0]);
     } catch (e) {
       console.warn("API fallback for pronunciation", e);
-      // Fallback local data if backend is offline
       const fallback = lang === 'zh' ? [
         { id: 1, lang: 'zh', category: 'initials', symbol: 'b', ipa_or_pinyin: 'b', mouth_guide_vi: 'Âm môi-môi, bật nhẹ không nổ, khép hai môi rồi mở ra.', example_term: '爸爸', example_annotation: 'bàba', example_vi: 'bố' },
         { id: 2, lang: 'zh', category: 'initials', symbol: 'zh', ipa_or_pinyin: 'zh', mouth_guide_vi: 'Âm uốn lưỡi (cuốn đầu lưỡi lên ngạc cứng), không bật hơi.', example_term: '质量', example_annotation: 'zhìliàng', example_vi: 'chất lượng' },
@@ -172,7 +172,6 @@ export default function PronunciationModule({ lang }: { lang: 'zh' | 'en' }) {
         ))}
       </div>
 
-      {/* Interactive Shadowing & Mic Recording Console */}
       {activeItem && (
         <div
           className="glass-card"

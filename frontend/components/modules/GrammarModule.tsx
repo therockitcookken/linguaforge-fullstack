@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, CheckCircle2, XCircle, Play, HelpCircle, AlertTriangle } from 'lucide-react';
 import { uiSound } from '@/lib/sound';
+import { API_BASE } from '@/lib/api';
 
 export default function GrammarModule({ lang }: { lang: 'zh' | 'en' }) {
   const [lessons, setLessons] = useState<any[]>([]);
@@ -18,7 +19,7 @@ export default function GrammarModule({ lang }: { lang: 'zh' | 'en' }) {
   const fetchGrammar = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/grammar/${lang}`);
+      const res = await fetch(`${API_BASE}/api/grammar/${lang}`);
       const json = await res.json();
       setLessons(json);
     } catch (e) {

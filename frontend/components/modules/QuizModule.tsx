@@ -1,259 +1,185 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, XCircle, Volume2, HelpCircle, BookOpen, AlertCircle, RefreshCw } from 'lucide-react';
+import { CheckCircle2, XCircle, Trophy, BookX, Sparkles, ArrowRight } from 'lucide-react';
 import { uiSound } from '@/lib/sound';
+import { API_BASE } from '@/lib/api';
 
 export default function QuizModule({ lang }: { lang: 'zh' | 'en' }) {
   const [questions, setQuestions] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
-  const [resultFeedback, setResultFeedback] = useState<any | null>(null);
-  const [score, setScore] = useState({ correct: 0, total: 0 });
+  const [score, setScore] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [errorNotebook, setErrorNotebook] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'quiz' | 'errors'>('quiz');
+  const [activeTab, setActiveTab] = useState<'quiz' | 'notebook'>('quiz');
 
   useEffect(() => {
     fetchQuiz();
-    fetchErrors();
+    fetchErrorNotebook();
   }, [lang]);
 
   const fetchQuiz = async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/quiz/${lang}`);
+      const res = await fetch(`${API_BASE}/api/quiz/${lang}`);
       const json = await res.json();
       setQuestions(json);
     } catch (e) {
       console.warn("API fallback for quiz", e);
       const fallback = lang === 'zh' ? [
-        { id: 1, lang: 'zh', qtype: 'mc', level: 'HSK3', topic: 'factory', question_text: 'Từ nào sau đây có nghĩa là "chất lượng"?', options: ['安全', '质量', '检查', '维护'], correct_answer: '质量', explanation_vi: '质量 (zhìliàng) có nghĩa là chất lượng. 安全: an toàn; 检查: kiểm tra.' }
+        { id: 1, lang: 'zh', qtype: 'mc', level: 'HSK3', topic: 'factory', question_text: 'Từ nào sau đây có nghĩa là "chất lượng"?', options: ['安全', '质量', '检查', '维护'], correct_answer: '质量', explanation_vi: '质量 (zhìliàng) có nghĩa là chất lượng.' },
+        { id: 2, lang: 'zh', qtype: 'mc', level: 'HSK3', topic: 'safety', question_text: 'Từ nào sau đây có nghĩa là "an toàn"?', options: ['安全', '质量', '仓库', '交接'], correct_answer: '安全', explanation_vi: '安全 (ānquán) nghĩa là an toàn.' },
       ] : [
-        { id: 2, lang: 'en', qtype: 'mc', level: 'B1', topic: 'factory', question_text: 'Which word means "sự kiểm tra chất lượng"?', options: ['maintenance', 'inspection', 'inventory', 'handover'], correct_answer: 'inspection', explanation_vi: '"Inspection" nghĩa là sự kiểm tra/giám sát.' }
+        { id: 10, lang: 'en', qtype: 'mc', level: 'B1', topic: 'factory', question_text: 'Which word means "sự kiểm tra chất lượng"?', options: ['maintenance', 'inspection', 'inventory', 'handover'], correct_answer: 'inspection', explanation_vi: '"Inspection" nghĩa là sự kiểm tra/giám sát.' }
       ];
       setQuestions(fallback);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchErrors = async () => {
+  const fetchErrorNotebook = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/errors?lang=${lang}`);
+      const res = await fetch(`${API_BASE}/api/quiz/errors/list`);
       const json = await res.json();
       setErrorNotebook(json);
-    } catch (e) {
-      console.warn("API fallback for error notebook", e);
-    }
+    } catch (e) {}
   };
 
-  const handleAnswerSubmit = async (option: string) => {
+  const currentQ = questions[currentIndex];
+
+  const handleOptionSelect = async (opt: string) => {
     if (isAnswered) return;
-    setSelectedOption(option);
+    setSelectedOption(opt);
     setIsAnswered(true);
+    const isCorrect = opt.trim().toLowerCase() === currentQ.correct_answer.trim().toLowerCase();
 
-    const currentQ = questions[currentIndex];
-    if (!currentQ) return;
-
-    try {
-      const res = await fetch(`http://localhost:8000/api/quiz/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_id: currentQ.id, user_answer: option })
-      });
-      const data = await res.json();
-      setResultFeedback(data);
-
-      if (data.is_correct) {
-        uiSound('correct');
-        setScore(prev => ({ ...prev, correct: prev.correct + 1, total: prev.total + 1 }));
-      } else {
-        uiSound('incorrect');
-        setScore(prev => ({ ...prev, total: prev.total + 1 }));
-        fetchErrors(); // refresh error notebook
-      }
-    } catch (e) {
-      const isCorrect = option.trim().toLowerCase() === currentQ.correct_answer.trim().toLowerCase();
-      setResultFeedback({ is_correct: isCorrect, correct_answer: currentQ.correct_answer, explanation_vi: currentQ.explanation_vi });
-      uiSound(isCorrect ? 'correct' : 'incorrect');
+    if (isCorrect) {
+      uiSound('correct');
+      setScore((prev) => prev + 10);
+    } else {
+      uiSound('incorrect');
+      try {
+        await fetch(`${API_BASE}/api/quiz/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question_id: currentQ.id,
+            user_answer: opt,
+            is_correct: false,
+            lang
+          })
+        });
+        fetchErrorNotebook();
+      } catch (e) {}
     }
   };
 
   const handleNext = () => {
-    uiSound('click');
     setSelectedOption(null);
     setIsAnswered(false);
-    setResultFeedback(null);
-    setCurrentIndex((prev) => (prev + 1) % questions.length);
+    uiSound('click');
+    setCurrentIndex((prev) => (prev + 1) % Math.max(1, questions.length));
   };
-
-  const currentQ = questions[currentIndex];
 
   return (
     <div className="module-container">
       <div className="module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 className="module-title">
-            {lang === 'zh' ? 'Quiz Thách Thức & Sổ Tay Sửa Lỗi (Chinese)' : 'Quiz Challenge & Error Notebook (English)'}
+            {lang === 'zh' ? 'Quiz Thách Thức & Sổ Tay Lỗi (Tiếng Trung)' : 'Quiz Thách Thức & Sổ Tay Lỗi (Tiếng Anh)'}
           </h2>
           <p className="module-subtitle">
-            Hệ thống câu hỏi thích ứng 8 dạng (Trắc nghiệm, Nghe, Điền từ, Sửa lỗi) tự động ghi chép câu sai vào Sổ Tay.
+            8 dạng bài tập thích ứng. Khi làm sai, hệ thống tự động lưu vào Sổ Tay Lỗi để ôn luyện lại.
           </p>
         </div>
 
-        <div className="lang-switch">
-          <button
-            className={activeTab === 'quiz' ? 'active' : ''}
-            onClick={() => { setActiveTab('quiz'); uiSound('click'); }}
-          >
-            Làm Quiz
-          </button>
-          <button
-            className={activeTab === 'errors' ? 'active' : ''}
-            onClick={() => { setActiveTab('errors'); uiSound('click'); }}
-          >
-            Sổ Tay Lỗi ({errorNotebook.length})
-          </button>
+        <div className="streak-badge" style={{ background: 'rgba(139, 92, 246, 0.2)', borderColor: '#8b5cf6' }}>
+          <Trophy size={18} color="#8b5cf6" />
+          <span>{score} Điểm Thách Thức</span>
         </div>
       </div>
 
-      {activeTab === 'quiz' ? (
-        currentQ ? (
-          <div style={{ maxWidth: '680px', margin: '20px auto 0' }}>
-            {/* Score & Progress */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '14px', marginBottom: '16px' }}>
-              <span>Câu {currentIndex + 1} / {questions.length}</span>
-              <span>Điểm: <strong style={{ color: '#10b981' }}>{score.correct}</strong> / {score.total}</span>
-            </div>
+      <div className="filter-tabs">
+        <button className={`filter-chip ${activeTab === 'quiz' ? 'active' : ''}`} onClick={() => setActiveTab('quiz')}>
+          ⚡ Thử Thách Quiz
+        </button>
+        <button className={`filter-chip ${activeTab === 'notebook' ? 'active' : ''}`} style={{ background: activeTab === 'notebook' ? 'rgba(239, 68, 68, 0.2)' : undefined }} onClick={() => setActiveTab('notebook')}>
+          <BookX size={14} style={{ marginRight: '6px' }} /> Sổ Tay Lỗi ({errorNotebook.length})
+        </button>
+      </div>
 
-            {/* Question Glass Card */}
-            <div className="glass-card" style={{ padding: '32px' }}>
-              <span className="card-tag">{currentQ.level} · {currentQ.topic}</span>
+      {activeTab === 'quiz' && questions.length > 0 && currentQ ? (
+        <div className="glass-card" style={{ marginTop: '24px', padding: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <span className="card-tag">{currentQ.level || 'HSK'}</span>
+            <span style={{ color: '#94a3b8', fontSize: '14px' }}>Câu {currentIndex + 1} / {questions.length}</span>
+          </div>
 
-              <h3 style={{ fontSize: '22px', fontWeight: 700, color: '#fff', margin: '16px 0 24px' }}>
-                {currentQ.question_text}
-              </h3>
+          <h3 style={{ fontSize: '24px', fontWeight: 700, color: '#fff', marginBottom: '24px' }}>
+            {currentQ.question_text}
+          </h3>
 
-              {/* Options */}
-              <div style={{ display: 'grid', gap: '12px' }}>
-                {currentQ.options?.map((opt: string) => {
-                  let btnBg = 'rgba(255, 255, 255, 0.05)';
-                  let borderClr = 'var(--glass-border)';
+          <div style={{ display: 'grid', gap: '14px' }}>
+            {currentQ.options?.map((opt: string) => {
+              const isSelected = selectedOption === opt;
+              const isCorrect = opt === currentQ.correct_answer;
+              let bg = 'rgba(255, 255, 255, 0.04)';
+              let border = 'rgba(255, 255, 255, 0.1)';
 
-                  if (isAnswered) {
-                    if (opt === currentQ.correct_answer) {
-                      btnBg = 'rgba(16, 185, 129, 0.2)';
-                      borderClr = '#10b981';
-                    } else if (selectedOption === opt) {
-                      btnBg = 'rgba(239, 68, 68, 0.2)';
-                      borderClr = '#ef4444';
-                    }
-                  }
+              if (isAnswered) {
+                if (isCorrect) {
+                  bg = 'rgba(16, 185, 129, 0.2)';
+                  border = '#10b981';
+                } else if (isSelected && !isCorrect) {
+                  bg = 'rgba(239, 68, 68, 0.2)';
+                  border = '#ef4444';
+                }
+              }
 
-                  return (
-                    <button
-                      key={opt}
-                      style={{
-                        padding: '16px 20px',
-                        borderRadius: '16px',
-                        border: `1px solid ${borderClr}`,
-                        background: btnBg,
-                        color: '#fff',
-                        fontSize: '16px',
-                        fontWeight: 600,
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onClick={() => handleAnswerSubmit(opt)}
-                    >
-                      <span>{opt}</span>
-                      {isAnswered && opt === currentQ.correct_answer && <CheckCircle2 color="#10b981" size={20} />}
-                      {isAnswered && selectedOption === opt && opt !== currentQ.correct_answer && <XCircle color="#ef4444" size={20} />}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Feedback & Explanation */}
-              {isAnswered && resultFeedback && (
-                <div
-                  style={{
-                    marginTop: '24px',
-                    padding: '16px 20px',
-                    borderRadius: '16px',
-                    background: resultFeedback.is_correct ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                    border: `1px solid ${resultFeedback.is_correct ? '#10b981' : '#ef4444'}`,
-                    color: '#fff'
-                  }}
+              return (
+                <button
+                  key={opt}
+                  className="quiz-option"
+                  style={{ background: bg, borderColor: border, padding: '16px 20px', borderRadius: '14px', textAlign: 'left', fontSize: '17px', color: '#fff', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  onClick={() => handleOptionSelect(opt)}
                 >
-                  <div style={{ fontWeight: 700, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {resultFeedback.is_correct ? <CheckCircle2 color="#10b981" /> : <XCircle color="#ef4444" />}
-                    <span>{resultFeedback.is_correct ? 'Chính xác!' : `Chưa đúng. Đáp án chuẩn: ${resultFeedback.correct_answer}`}</span>
-                  </div>
+                  <span>{opt}</span>
+                  {isAnswered && isCorrect && <CheckCircle2 size={20} color="#10b981" />}
+                  {isAnswered && isSelected && !isCorrect && <XCircle size={20} color="#ef4444" />}
+                </button>
+              );
+            })}
+          </div>
 
-                  <div style={{ marginTop: '8px', fontSize: '14px', color: '#cbd5e1', lineHeight: 1.5 }}>
-                    💡 {resultFeedback.explanation_vi}
-                  </div>
-
-                  <button
-                    className="cta"
-                    style={{ marginTop: '16px', width: '100%', background: '#0ea5e9', color: '#fff' }}
-                    onClick={handleNext}
-                  >
-                    Câu tiếp theo →
-                  </button>
-                </div>
-              )}
+          {isAnswered && (
+            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ color: '#e2e8f0', fontSize: '14px' }}>
+                💡 <strong>Giải thích:</strong> {currentQ.explanation_vi}
+              </div>
+              <button className="cta" onClick={handleNext} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Câu tiếp theo <ArrowRight size={16} />
+              </button>
             </div>
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '40px' }}>Không tìm thấy câu hỏi quiz.</div>
-        )
-      ) : (
-        /* Error Notebook View */
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ fontSize: '20px', fontWeight: 700 }}>Sổ Tay Ghi Chép Lỗi Sai (Mistake Notebook)</h3>
-            <button className="icon-btn" onClick={fetchErrors} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <RefreshCw size={14} /> Làm mới
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: '16px' }}>
-            {errorNotebook.map((err) => (
-              <div key={err.id} className="glass-card" style={{ background: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span className="card-tag" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}>
-                    {err.module_source.toUpperCase()}
-                  </span>
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>{new Date(err.created_at).toLocaleDateString()}</span>
-                </div>
-
-                <div style={{ fontSize: '16px', fontWeight: 700, color: '#fff', marginTop: '8px' }}>
-                  {err.prompt_context}
-                </div>
-
-                <div style={{ display: 'flex', gap: '20px', marginTop: '10px', fontSize: '14px' }}>
-                  <div style={{ color: '#ef4444' }}>❌ Bạn trả lời: <strong>{err.user_answer}</strong></div>
-                  <div style={{ color: '#10b981' }}>✅ Đáp án chuẩn: <strong>{err.correct_answer}</strong></div>
-                </div>
-
-                <div style={{ marginTop: '10px', fontSize: '13px', color: '#cbd5e1', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '10px' }}>
-                  💡 Giải thích: {err.explanation_vi}
-                </div>
-              </div>
-            ))}
-
-            {errorNotebook.length === 0 && (
-              <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>
-                🎉 Bạn chưa có lỗi sai nào trong Sổ Tay! Hãy giữ vững phong độ.
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      )}
+      ) : activeTab === 'notebook' ? (
+        <div style={{ marginTop: '24px', display: 'grid', gap: '16px' }}>
+          {errorNotebook.length > 0 ? (
+            errorNotebook.map((err) => (
+              <div key={err.id} className="glass-card" style={{ borderLeft: '4px solid #ef4444' }}>
+                <div style={{ color: '#ef4444', fontWeight: 700, fontSize: '13px' }}>🔴 Câu làm sai</div>
+                <div style={{ fontSize: '16px', fontWeight: 600, color: '#fff', marginTop: '6px' }}>{err.question_text || 'Câu hỏi luyện tập'}</div>
+                <div style={{ fontSize: '14px', color: '#94a3b8', marginTop: '4px' }}>Lựa chọn sai: <span style={{ color: '#ef4444' }}>{err.user_answer}</span></div>
+              </div>
+            ))
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#10b981' }}>🎉 Bạn chưa có câu làm sai nào trong Sổ Tay Lỗi!</div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
