@@ -2,6 +2,18 @@ from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Any
 from datetime import datetime
 
+class SynonymItem(BaseModel):
+    term: str
+    pinyin: Optional[str] = None
+    ipa: Optional[str] = None
+    meaning_vi: str
+
+class AntonymItem(BaseModel):
+    term: str
+    pinyin: Optional[str] = None
+    ipa: Optional[str] = None
+    meaning_vi: str
+
 class VocabularyBase(BaseModel):
     lang: str
     term: str
@@ -11,6 +23,8 @@ class VocabularyBase(BaseModel):
     pos: str
     level: str
     topic: str
+    synonyms: Optional[List[Any]] = None
+    antonyms: Optional[List[Any]] = None
     audio_url: Optional[str] = None
     provenance: str
     license: str = "CC-BY-4.0"
@@ -84,7 +98,7 @@ class GrammarLessonOut(BaseModel):
 
 class FlashcardReviewIn(BaseModel):
     flashcard_id: int
-    rating: str  # 'Again', 'Hard', 'Good', 'Easy'
+    rating: str
 
 class FlashcardOut(BaseModel):
     id: int
