@@ -90,10 +90,11 @@ def get_dictionary(
 ):
     query = db.query(Vocabulary).filter(Vocabulary.lang == lang)
     if q:
-        query = query.filter(
+        query = query.outerjoin(VocabularyTranslation).filter(
             (Vocabulary.term.ilike(f"%{q}%")) |
             (Vocabulary.pinyin.ilike(f"%{q}%")) |
-            (Vocabulary.ipa.ilike(f"%{q}%"))
+            (Vocabulary.ipa.ilike(f"%{q}%")) |
+            (VocabularyTranslation.meaning.ilike(f"%{q}%"))
         )
     if topic and topic != "all":
         query = query.filter(Vocabulary.topic == topic)

@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, Volume2, Bookmark, ShieldCheck, Play, ChevronDown, Download,
   Copy, Check, Sparkles, SlidersHorizontal, Layers, Factory, Wrench, Package,
-  HardHat, Briefcase, FolderKanban, Info
+  HardHat, Briefcase, FolderKanban, Info, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { uiSound } from '@/lib/sound';
@@ -22,10 +22,16 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
   const [playingAudioId, setPlayingAudioId] = useState<string | number | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
 
-  const { toggleFavorite, isFavorite } = useAppStore();
-  const cacheRef = React.useRef<Record<string, any[]>>({});
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(12);
 
+  const { toggleFavorite, isFavorite } = useAppStore();
+  const cacheRef = useRef<Record<string, any[]>>({});
+
+  // Reset to Page 1 when filters or language change
   useEffect(() => {
+    setCurrentPage(1);
     fetchData();
   }, [lang, query, selectedTopic, activeTab]);
 
@@ -42,10 +48,10 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
 
     if (activeTab === 'two_hanzi' && lang === 'zh') {
       const twoHanzi = filtered.filter((item: any) => (item.term || item.hanzi || '').length === 2);
-      setTwoHanziWords(twoHanzi.slice(0, 100));
+      setTwoHanziWords(twoHanzi);
       setTotalCount(twoHanzi.length);
     } else {
-      setWords(filtered.slice(0, 100));
+      setWords(filtered);
       setTotalCount(filtered.length);
     }
   };
@@ -55,7 +61,7 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
     try {
       const isRemote = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
       
-      // If remote deployment or cache available, use static JSON dataset directly for maximum speed
+      // If remote deployment or cache available, use static JSON dataset directly
       if (isRemote || cacheRef.current[lang]) {
         if (cacheRef.current[lang]) {
           filterAndSetData(cacheRef.current[lang]);
@@ -91,7 +97,7 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
           return;
         }
       } else {
-        const url = `${API_BASE}/api/dictionary/${lang}?q=${encodeURIComponent(query)}&topic=${selectedTopic}&limit=100`;
+        const url = `${API_BASE}/api/dictionary/${lang}?q=${encodeURIComponent(query)}&topic=${selectedTopic}&limit=500`;
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
         if (res.ok) {
@@ -167,7 +173,41 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
     { key: 'office', label: '💼 Giao tiếp Công sở (Office Management)', Icon: Briefcase },
   ];
 
-  const displayList = activeTab === 'two_hanzi' && lang === 'zh' ? twoHanziWords : words;
+  const fullList = activeTab === 'two_hanzi' && lang === 'zh' ? twoHanziWords : words;
+  const totalPages = Math.max(1, Math.ceil(fullList.length / itemsPerPage));
+
+  // Ensure current page is valid
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (validCurrentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(fullList.length, validCurrentPage * itemsPerPage);
+  const displayList = fullList.slice(startIndex, endIndex);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      uiSound('click');
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 200, behavior: 'smooth' });
+      }
+    }
+  };
+
+  // Helper for generating page numbers (e.g. 1 2 3 4 5)
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    let start = Math.max(1, validCurrentPage - 2);
+    let end = Math.min(totalPages, start + maxVisible - 1);
+
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
 
   return (
     <div className="module-container">
@@ -179,11 +219,11 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
               {lang === 'zh' ? 'Từ điển Tiếng Trung Chuyên Ngành (Hanzi + Pinyin)' : 'Từ điển Tiếng Anh Chuyên Ngành (English + IPA)'}
             </h2>
             <span className="badge glowing" style={{ background: 'linear-gradient(135deg, #0ea5e9, #8b5cf6)', color: '#fff', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
-              10,000+ REAL LEXICON
+              AUTHENTIC LEXICON
             </span>
           </div>
           <p className="module-subtitle">
-            Hệ thống 10.000+ từ vựng thực tế công xưởng, 80% từ 2 chữ Hán chuẩn, tích hợp Từ đồng nghĩa / trái nghĩa kèm Pinyin, IPA & Việt dịch.
+            Hệ thống từ vựng chuẩn từ điển thực tế công xưởng (như tolerance, throughput, workstation, 安全, 质量...), không chứa từ giả hay mã số, kèm Pinyin, IPA & Việt dịch.
           </p>
         </div>
 
@@ -200,7 +240,7 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
             onClick={() => { setActiveTab('all'); uiSound('click'); }}
             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            <Layers size={15} /> Tất cả từ vựng chuyên ngành (10.000+)
+            <Layers size={15} /> Tất cả từ vựng chuyên ngành
           </button>
           <button
             className={`filter-chip ${activeTab === 'two_hanzi' ? 'active' : ''}`}
@@ -211,7 +251,7 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
             }}
             onClick={() => { setActiveTab('two_hanzi'); uiSound('click'); }}
           >
-            <Sparkles size={15} color="#f59e0b" /> ⭐ Bộ Từ Chuẩn 2 Chữ Hán (80% Standard Collection)
+            <Sparkles size={15} color="#f59e0b" /> ⭐ Bộ Từ Chuẩn 2 Chữ Hán (Standard 2-Hanzi)
           </button>
         </div>
       )}
@@ -262,15 +302,115 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
         </div>
       </div>
 
-      {/* Data Count Indicator */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', color: '#94a3b8', fontSize: '13px' }}>
-        <span>Hiển thị <strong>{displayList.length}</strong> / <strong>{totalCount}</strong> thuật ngữ chuẩn hóa</span>
-        {loading && <span style={{ color: '#0ea5e9', display: 'flex', alignItems: 'center', gap: '6px' }}><Sparkles size={14} className="animate-spin" /> Đang tải kho dữ liệu...</span>}
+      {/* Top Pagination Control Bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px', background: 'rgba(15, 23, 42, 0.6)', padding: '12px 18px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+        {/* Data Range Count Indicator */}
+        <div style={{ color: '#94a3b8', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>
+            Hiển thị <strong>{fullList.length > 0 ? startIndex + 1 : 0} - {endIndex}</strong> / <strong>{fullList.length}</strong> thuật ngữ chuẩn
+          </span>
+          {loading && <span style={{ color: '#0ea5e9', display: 'flex', alignItems: 'center', gap: '6px' }}><Sparkles size={14} className="animate-spin" /> Đang cập nhật...</span>}
+        </div>
+
+        {/* Navigation Control Buttons */}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {/* First Page */}
+            <button
+              className="icon-btn"
+              disabled={validCurrentPage === 1}
+              onClick={() => handlePageChange(1)}
+              title="Trang đầu"
+              style={{ opacity: validCurrentPage === 1 ? 0.4 : 1, padding: '6px 10px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)' }}
+            >
+              <ChevronsLeft size={16} color="#0ea5e9" />
+            </button>
+
+            {/* Previous Page */}
+            <button
+              className="icon-btn"
+              disabled={validCurrentPage === 1}
+              onClick={() => handlePageChange(validCurrentPage - 1)}
+              title="Trang trước"
+              style={{ opacity: validCurrentPage === 1 ? 0.4 : 1, padding: '6px 10px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)' }}
+            >
+              <ChevronLeft size={16} color="#0ea5e9" />
+            </button>
+
+            {/* Page Number Buttons */}
+            {getPageNumbers().map((pageNum) => (
+              <button
+                key={pageNum}
+                onClick={() => handlePageChange(pageNum)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: validCurrentPage === pageNum ? 800 : 500,
+                  background: validCurrentPage === pageNum ? 'linear-gradient(135deg, #0ea5e9, #8b5cf6)' : 'rgba(255, 255, 255, 0.05)',
+                  color: validCurrentPage === pageNum ? '#ffffff' : '#94a3b8',
+                  border: validCurrentPage === pageNum ? '1px solid rgba(14, 165, 233, 0.5)' : '1px solid rgba(255, 255, 255, 0.05)',
+                  boxShadow: validCurrentPage === pageNum ? '0 0 12px rgba(14, 165, 233, 0.4)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            {/* Next Page */}
+            <button
+              className="icon-btn"
+              disabled={validCurrentPage === totalPages}
+              onClick={() => handlePageChange(validCurrentPage + 1)}
+              title="Trang sau"
+              style={{ opacity: validCurrentPage === totalPages ? 0.4 : 1, padding: '6px 10px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)' }}
+            >
+              <ChevronRight size={16} color="#0ea5e9" />
+            </button>
+
+            {/* Last Page */}
+            <button
+              className="icon-btn"
+              disabled={validCurrentPage === totalPages}
+              onClick={() => handlePageChange(totalPages)}
+              title="Trang cuối"
+              style={{ opacity: validCurrentPage === totalPages ? 0.4 : 1, padding: '6px 10px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)' }}
+            >
+              <ChevronsRight size={16} color="#0ea5e9" />
+            </button>
+          </div>
+        )}
+
+        {/* Page Size Selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#94a3b8' }}>
+          <span>Hiển thị:</span>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); uiSound('click'); }}
+            style={{
+              background: '#0f172a',
+              color: '#38bdf8',
+              border: '1px solid rgba(14, 165, 233, 0.3)',
+              borderRadius: '8px',
+              padding: '4px 8px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <option value={12}>12 từ/trang</option>
+            <option value={24}>24 từ/trang</option>
+            <option value={48}>48 từ/trang</option>
+            <option value={96}>96 từ/trang</option>
+          </select>
+        </div>
       </div>
 
       {/* Cards Grid with double-bezel industrial styling & Framer Motion */}
       <div className="cards-grid">
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {displayList.map((item, idx) => {
             const favKey = `vocab_${item.id || item.term || item.hanzi}`;
             const isFav = isFavorite(favKey);
@@ -325,12 +465,12 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
                   </div>
 
                   {/* Term Headword */}
-                  <div className="card-term" style={{ fontSize: '30px', color: '#ffffff', marginTop: '12px', fontWeight: 800, letterSpacing: '0.5px' }}>
+                  <div className="card-term" style={{ fontSize: '28px', color: '#ffffff', marginTop: '12px', fontWeight: 800, letterSpacing: '0.5px' }}>
                     {item.term || item.hanzi}
                   </div>
 
                   {/* Pinyin or IPA */}
-                  <div className="card-annotation" style={{ color: '#38bdf8', fontSize: '17px', fontWeight: 600, marginTop: '2px' }}>
+                  <div className="card-annotation" style={{ color: '#38bdf8', fontSize: '16px', fontWeight: 600, marginTop: '2px' }}>
                     {item.pinyin || item.ipa}
                   </div>
 
@@ -393,6 +533,70 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
           })}
         </AnimatePresence>
       </div>
+
+      {/* Bottom Pagination Control Bar */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '32px', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            className="icon-btn"
+            disabled={validCurrentPage === 1}
+            onClick={() => handlePageChange(1)}
+            title="Trang đầu"
+            style={{ opacity: validCurrentPage === 1 ? 0.4 : 1, padding: '8px 12px', borderRadius: '10px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+          >
+            <ChevronsLeft size={18} color="#0ea5e9" />
+          </button>
+          <button
+            className="icon-btn"
+            disabled={validCurrentPage === 1}
+            onClick={() => handlePageChange(validCurrentPage - 1)}
+            title="Trang trước"
+            style={{ opacity: validCurrentPage === 1 ? 0.4 : 1, padding: '8px 12px', borderRadius: '10px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+          >
+            <ChevronLeft size={18} color="#0ea5e9" />
+          </button>
+
+          {getPageNumbers().map((pageNum) => (
+            <button
+              key={pageNum}
+              onClick={() => handlePageChange(pageNum)}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: validCurrentPage === pageNum ? 800 : 500,
+                background: validCurrentPage === pageNum ? 'linear-gradient(135deg, #0ea5e9, #8b5cf6)' : 'rgba(15, 23, 42, 0.6)',
+                color: validCurrentPage === pageNum ? '#ffffff' : '#94a3b8',
+                border: validCurrentPage === pageNum ? '1px solid rgba(14, 165, 233, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: validCurrentPage === pageNum ? '0 0 16px rgba(14, 165, 233, 0.4)' : 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              {pageNum}
+            </button>
+          ))}
+
+          <button
+            className="icon-btn"
+            disabled={validCurrentPage === totalPages}
+            onClick={() => handlePageChange(validCurrentPage + 1)}
+            title="Trang sau"
+            style={{ opacity: validCurrentPage === totalPages ? 0.4 : 1, padding: '8px 12px', borderRadius: '10px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+          >
+            <ChevronRight size={18} color="#0ea5e9" />
+          </button>
+          <button
+            className="icon-btn"
+            disabled={validCurrentPage === totalPages}
+            onClick={() => handlePageChange(totalPages)}
+            title="Trang cuối"
+            style={{ opacity: validCurrentPage === totalPages ? 0.4 : 1, padding: '8px 12px', borderRadius: '10px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+          >
+            <ChevronsRight size={18} color="#0ea5e9" />
+          </button>
+        </div>
+      )}
 
       {displayList.length === 0 && !loading && (
         <div style={{ textAlign: 'center', padding: '48px 20px', color: '#64748b', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', border: '1px dashed rgba(255, 255, 255, 0.1)', marginTop: '24px' }}>
