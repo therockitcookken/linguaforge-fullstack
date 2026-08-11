@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: linguaforge-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: linguaforge-db
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+
+databases:
+  - name: linguaforge-db
+    databaseName: linguaforge
+    user: linguaforge
+    plan: free
