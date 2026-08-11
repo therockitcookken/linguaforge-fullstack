@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from sqlalchemy.orm import Session
 from .models import (
     Vocabulary, VocabularyTranslation, VocabularyExample, TwoHanziWord,
@@ -31,41 +33,14 @@ def seed_database(db: Session):
             db.add(PronunciationUnit(**pu))
 
     # 3. Chinese Vocabulary (80% 2-character Hanzi) with Synonyms & Antonyms
-    if db.query(Vocabulary).filter(Vocabulary.lang == "zh").first() is None:
-        zh_words = [
-            {
-                "term": "安全", "pinyin": "ānquán", "pinyin_numeric": "an1quan2", "pos": "noun/adj", "level": "HSK3", "topic": "safety", "meaning_vi": "an toàn", "provenance": "provenance_hsk_factory_2026",
-                "synonyms": [{"term": "平安", "pinyin": "píng'ān", "meaning_vi": "bình an, an toàn"}],
-                "antonyms": [{"term": "危险", "pinyin": "wēixiǎn", "meaning_vi": "nguy hiểm"}],
-                "ex_zh": "车间安全是第一位的。", "ex_py": "Chējiān ānquán shì dì yī wèi de.", "ex_vi": "An toàn nhà xưởng là ưu tiên hàng đầu."
-            },
-            {
-                "term": "质量", "pinyin": "zhìliàng", "pinyin_numeric": "zhi4liang4", "pos": "noun", "level": "HSK3", "topic": "qc", "meaning_vi": "chất lượng", "provenance": "provenance_hsk_factory_2026",
-                "synonyms": [{"term": "质检", "pinyin": "zhìjiǎn", "meaning_vi": "kiểm tra chất lượng"}],
-                "antonyms": [{"term": "劣质", "pinyin": "lièzhì", "meaning_vi": "chất lượng kém"}],
-                "ex_zh": "我们需要提高产品质量。", "ex_py": "Wǒmen xūyào tígāo chǎnpǐn zhìliàng.", "ex_vi": "Chúng ta cần nâng cao chất lượng sản phẩm."
-            },
-            {
-                "term": "检查", "pinyin": "jiǎnchá", "pinyin_numeric": "jian3cha2", "pos": "verb", "level": "HSK3", "topic": "qc", "meaning_vi": "kiểm tra", "provenance": "provenance_hsk_factory_2026",
-                "synonyms": [{"term": "检验", "pinyin": "jiǎnyàn", "meaning_vi": "kiểm nghiệm"}],
-                "antonyms": [{"term": "忽略", "pinyin": "hūlüè", "meaning_vi": "bỏ sót, ngó lơ"}],
-                "ex_zh": "QC组正在检查样品。", "ex_py": "QC zǔ zhèngzài jiǎnchá yàngpǐn.", "ex_vi": "Tổ QC đang kiểm tra mẫu."
-            },
-            {
-                "term": "维护", "pinyin": "wéihù", "pinyin_numeric": "wei2hu4", "pos": "verb/noun", "level": "HSK4", "topic": "maintenance", "meaning_vi": "bảo trì", "provenance": "provenance_hsk_factory_2026", "synonyms": [{"term": "保养", "pinyin": "bǎoyǎng", "meaning_vi": "bảo dưỡng"}], "antonyms": [{"term": "破坏", "pinyin": "pòhuài", "meaning_vi": "phá hỏng"}], "ex_zh": "保养员每周维护设备。", "ex_py": "Bǎoyǎngyuán měizhōu wéihù shèbèi.", "ex_vi": "Nhân viên bảo dưỡng bảo trì thiết bị hàng tuần."
-            },
-            {
-                "term": "仓库", "pinyin": "cāngkù", "pinyin_numeric": "cang1ku4", "pos": "noun", "level": "HSK3", "topic": "warehouse", "meaning_vi": "kho hàng", "provenance": "provenance_hsk_factory_2026", "synonyms": [{"term": "货仓", "pinyin": "huòcāng", "meaning_vi": "kho hàng hóa"}], "antonyms": [], "ex_zh": "原材料已盘点完毕存入仓库。", "ex_py": "Yuáncáiliào yǐ pándiǎn wánbì cúnrù cāngkù.", "ex_vi": "Nguyên vật liệu đã kiểm kê xong và nạp vào kho."
-            },
-            {
-                "term": "交接", "pinyin": "jiāojiē", "pinyin_numeric": "jiao1jie1", "pos": "verb", "level": "HSK4", "topic": "office", "meaning_vi": "bàn giao", "provenance": "provenance_hsk_factory_2026", "synonyms": [{"term": "移交", "pinyin": "yíjiāo", "meaning_vi": "di chuyển bàn giao"}], "antonyms": [], "ex_zh": "早班和晚班顺利完成交接。", "ex_py": "Zǎobān hé wǎnbān shùnlì wánchéng jiāojiē.", "ex_vi": "Ca sáng và ca tối đã hoàn thành bàn giao suôn sẻ."
-            }
-        ]
-
+    zh_json_path = Path(__file__).parent.parent / "data" / "chinese_lexicon_10k.json"
+    if db.query(Vocabulary).filter(Vocabulary.lang == "zh").count() < 100 and zh_json_path.exists():
+        zh_words = json.loads(zh_json_path.read_text(encoding="utf-8"))
         for w in zh_words:
             v = Vocabulary(
-                lang="zh", term=w["term"], pinyin=w["pinyin"], pinyin_numeric=w["pinyin_numeric"],
-                pos=w["pos"], level=w["level"], topic=w["topic"], synonyms=w["synonyms"], antonyms=w["antonyms"], provenance=w["provenance"]
+                lang="zh", term=w["term"], pinyin=w.get("pinyin"), pinyin_numeric=w.get("pinyin_numeric"),
+                pos=w.get("pos", "noun"), level=w.get("level", "HSK3"), topic=w.get("topic", "factory"),
+                synonyms=w.get("synonyms"), antonyms=w.get("antonyms"), provenance=w.get("provenance", "provenance_hsk_factory_2026")
             )
             db.add(v)
             db.flush()
@@ -73,52 +48,32 @@ def seed_database(db: Session):
             vt = VocabularyTranslation(vocab_id=v.id, target_lang="vi", meaning=w["meaning_vi"])
             db.add(vt)
 
-            ve = VocabularyExample(vocab_id=v.id, sentence=w["ex_zh"], pinyin=w["ex_py"], translation_vi=w["ex_vi"])
-            db.add(ve)
+            if w.get("examples"):
+                ex = w["examples"][0]
+                ve = VocabularyExample(vocab_id=v.id, sentence=ex["sentence"], pinyin=ex.get("pinyin"), translation_vi=ex["translation_vi"])
+                db.add(ve)
 
             fc = Flashcard(vocab_id=v.id, lang="zh", interval=1, ease_factor=2.5, repetitions=0)
             db.add(fc)
 
-    # TwoHanziWord Seeding
-    if db.query(TwoHanziWord).first() is None:
-        th_words = [
-            {"hanzi": "安全", "pinyin": "ānquán", "meaning_vi": "an toàn", "topic": "safety", "hsk_level": "HSK3", "provenance": "provenance_hsk_factory_2026"},
-            {"hanzi": "质量", "pinyin": "zhìliàng", "meaning_vi": "chất lượng", "topic": "qc", "hsk_level": "HSK3", "provenance": "provenance_hsk_factory_2026"},
-            {"hanzi": "检查", "pinyin": "jiǎnchá", "meaning_vi": "kiểm tra", "topic": "qc", "hsk_level": "HSK3", "provenance": "provenance_hsk_factory_2026"},
-            {"hanzi": "维护", "pinyin": "wéihù", "meaning_vi": "bảo trì", "topic": "maintenance", "hsk_level": "HSK4", "provenance": "provenance_hsk_factory_2026"},
-            {"hanzi": "仓库", "pinyin": "cāngkù", "meaning_vi": "kho hàng", "topic": "warehouse", "hsk_level": "HSK3", "provenance": "provenance_hsk_factory_2026"},
-            {"hanzi": "交接", "pinyin": "jiāojiē", "meaning_vi": "bàn giao", "topic": "office", "hsk_level": "HSK4", "provenance": "provenance_hsk_factory_2026"},
-        ]
-        for th in th_words:
-            db.add(TwoHanziWord(**th))
+            # Auto-sync to TwoHanziWord if 2 characters long
+            if len(w["term"]) == 2 and db.query(TwoHanziWord).filter(TwoHanziWord.hanzi == w["term"]).first() is None:
+                th = TwoHanziWord(
+                    hanzi=w["term"], pinyin=w["pinyin"], meaning_vi=w["meaning_vi"],
+                    topic=w.get("topic", "factory"), hsk_level=w.get("level", "HSK3"),
+                    provenance=w.get("provenance", "provenance_hsk_factory_2026")
+                )
+                db.add(th)
 
     # 4. English Vocabulary with Synonyms & Antonyms
-    if db.query(Vocabulary).filter(Vocabulary.lang == "en").first() is None:
-        en_words = [
-            {
-                "term": "inspection", "ipa": "/ɪnˈspekʃn/", "pos": "noun", "level": "B1", "topic": "qc", "meaning_vi": "sự kiểm tra", "provenance": "provenance_cefr_factory_2026",
-                "synonyms": [{"term": "examination", "ipa": "/ɪɡˌzæmɪˈneɪʃn/", "meaning_vi": "sự xem xét/kiểm tra"}],
-                "antonyms": [{"term": "neglect", "ipa": "/nɪˈɡlekt/", "meaning_vi": "sự bỏ sót"}],
-                "ex_en": "Quality inspection is required before shipment.", "ex_vi": "Cần kiểm tra chất lượng trước khi giao hàng."
-            },
-            {
-                "term": "maintenance", "ipa": "/ˈmeɪntənəns/", "pos": "noun", "level": "B2", "topic": "maintenance", "meaning_vi": "bảo trì, bảo dưỡng", "provenance": "provenance_cefr_factory_2026",
-                "synonyms": [{"term": "servicing", "ipa": "/ˈsɜːvɪsɪŋ/", "meaning_vi": "sự bảo dưỡng"}],
-                "antonyms": [{"term": "damage", "ipa": "/ˈdæmɪdʒ/", "meaning_vi": "sự phá hỏng"}],
-                "ex_en": "The machine needs urgent maintenance.", "ex_vi": "Cỗ máy cần bảo trì gấp."
-            },
-            {
-                "term": "inventory", "ipa": "/ˈɪnvəntri/", "pos": "noun", "level": "B1", "topic": "warehouse", "meaning_vi": "hàng tồn kho / kiểm kê", "provenance": "provenance_cefr_factory_2026",
-                "synonyms": [{"term": "stock", "ipa": "/stɒk/", "meaning_vi": "hàng trong kho"}],
-                "antonyms": [],
-                "ex_en": "Warehouse staff updated the inventory list.", "ex_vi": "Nhân viên kho đã cập nhật danh sách kiểm kê."
-            }
-        ]
-
+    en_json_path = Path(__file__).parent.parent / "data" / "english_lexicon_10k.json"
+    if db.query(Vocabulary).filter(Vocabulary.lang == "en").count() < 100 and en_json_path.exists():
+        en_words = json.loads(en_json_path.read_text(encoding="utf-8"))
         for w in en_words:
             v = Vocabulary(
-                lang="en", term=w["term"], ipa=w["ipa"], pos=w["pos"], level=w["level"],
-                topic=w["topic"], synonyms=w["synonyms"], antonyms=w["antonyms"], provenance=w["provenance"]
+                lang="en", term=w["term"], ipa=w.get("ipa"), pos=w.get("pos", "noun"),
+                level=w.get("level", "B1"), topic=w.get("topic", "factory"),
+                synonyms=w.get("synonyms"), antonyms=w.get("antonyms"), provenance=w.get("provenance", "provenance_cefr_factory_2026")
             )
             db.add(v)
             db.flush()
@@ -126,8 +81,10 @@ def seed_database(db: Session):
             vt = VocabularyTranslation(vocab_id=v.id, target_lang="vi", meaning=w["meaning_vi"])
             db.add(vt)
 
-            ve = VocabularyExample(vocab_id=v.id, sentence=w["ex_en"], translation_vi=w["ex_vi"])
-            db.add(ve)
+            if w.get("examples"):
+                ex = w["examples"][0]
+                ve = VocabularyExample(vocab_id=v.id, sentence=ex["sentence"], translation_vi=ex["translation_vi"])
+                db.add(ve)
 
             fc = Flashcard(vocab_id=v.id, lang="en", interval=1, ease_factor=2.5, repetitions=0)
             db.add(fc)

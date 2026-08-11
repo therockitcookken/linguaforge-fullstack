@@ -59,8 +59,24 @@ def get_grammar(lang: str, level: Optional[str] = None, db: Session = Depends(ge
 
 # --- MODULE 3: DICTIONARY & TWO-HANZI COLLECTION ---
 @app.get("/api/dictionary/two_hanzi", response_model=List[TwoHanziWordOut])
-def get_two_hanzi_words(db: Session = Depends(get_db)):
-    return db.query(TwoHanziWord).all()
+def get_two_hanzi_words(
+    q: str = "",
+    topic: Optional[str] = None,
+    hsk_level: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(TwoHanziWord)
+    if q:
+        query = query.filter(
+            (TwoHanziWord.hanzi.ilike(f"%{q}%")) |
+            (TwoHanziWord.pinyin.ilike(f"%{q}%")) |
+            (TwoHanziWord.meaning_vi.ilike(f"%{q}%"))
+        )
+    if topic and topic != "all":
+        query = query.filter(TwoHanziWord.topic == topic)
+    if hsk_level:
+        query = query.filter(TwoHanziWord.hsk_level == hsk_level)
+    return query.all()
 
 @app.get("/api/dictionary/{lang}")
 def get_dictionary(
@@ -69,7 +85,7 @@ def get_dictionary(
     topic: Optional[str] = None,
     level: Optional[str] = None,
     page: int = Query(1, ge=1),
-    limit: int = Query(50, le=200),
+    limit: int = Query(100, le=500),
     db: Session = Depends(get_db)
 ):
     query = db.query(Vocabulary).filter(Vocabulary.lang == lang)
@@ -79,7 +95,7 @@ def get_dictionary(
             (Vocabulary.pinyin.ilike(f"%{q}%")) |
             (Vocabulary.ipa.ilike(f"%{q}%"))
         )
-    if topic:
+    if topic and topic != "all":
         query = query.filter(Vocabulary.topic == topic)
     if level:
         query = query.filter(Vocabulary.level == level)
@@ -100,6 +116,8 @@ def get_dictionary(
             "level": item.level,
             "topic": item.topic,
             "meaning_vi": trans.meaning if trans else "",
+            "synonyms": item.synonyms or [],
+            "antonyms": item.antonyms or [],
             "provenance": item.provenance,
             "license": item.license,
             "review_status": item.review_status,
