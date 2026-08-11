@@ -23,65 +23,99 @@ export default function DictionaryModule({ lang }: { lang: 'zh' | 'en' }) {
   const [totalCount, setTotalCount] = useState<number>(0);
 
   const { toggleFavorite, isFavorite } = useAppStore();
+  const cacheRef = React.useRef<Record<string, any[]>>({});
 
   useEffect(() => {
     fetchData();
   }, [lang, query, selectedTopic, activeTab]);
 
+  const filterAndSetData = (allData: any[]) => {
+    const qLower = query.trim().toLowerCase();
+
+    let filtered = allData.filter((item: any) => {
+      const matchTopic = selectedTopic === 'all' || item.topic === selectedTopic;
+      const termMatch = (item.term || item.hanzi || '').toLowerCase().includes(qLower);
+      const pinyinMatch = (item.pinyin || item.ipa || '').toLowerCase().includes(qLower);
+      const meaningMatch = (item.meaning_vi || '').toLowerCase().includes(qLower);
+      return matchTopic && (termMatch || pinyinMatch || meaningMatch);
+    });
+
+    if (activeTab === 'two_hanzi' && lang === 'zh') {
+      const twoHanzi = filtered.filter((item: any) => (item.term || item.hanzi || '').length === 2);
+      setTwoHanziWords(twoHanzi.slice(0, 100));
+      setTotalCount(twoHanzi.length);
+    } else {
+      setWords(filtered.slice(0, 100));
+      setTotalCount(filtered.length);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
+      const isRemote = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      
+      // If remote deployment or cache available, use static JSON dataset directly for maximum speed
+      if (isRemote || cacheRef.current[lang]) {
+        if (cacheRef.current[lang]) {
+          filterAndSetData(cacheRef.current[lang]);
+          setLoading(false);
+          return;
+        }
+
+        const staticUrl = lang === 'zh' ? '/data/chinese_lexicon_10k.json' : '/data/english_lexicon_10k.json';
+        const res = await fetch(staticUrl);
+        if (res.ok) {
+          const allData: any[] = await res.json();
+          cacheRef.current[lang] = allData;
+          filterAndSetData(allData);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Try local API with short timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1000);
+
       if (activeTab === 'two_hanzi' && lang === 'zh') {
         const url = `${API_BASE}/api/dictionary/two_hanzi?q=${encodeURIComponent(query)}&topic=${selectedTopic}`;
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (res.ok) {
           const json = await res.json();
           const items = Array.isArray(json) ? json : json.items || [];
           setTwoHanziWords(items);
           setTotalCount(items.length);
-        } else {
-          throw new Error('Failed to fetch two hanzi');
+          setLoading(false);
+          return;
         }
       } else {
         const url = `${API_BASE}/api/dictionary/${lang}?q=${encodeURIComponent(query)}&topic=${selectedTopic}&limit=100`;
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (res.ok) {
           const json = await res.json();
           const items = Array.isArray(json) ? json : json.items || [];
           setWords(items);
           setTotalCount(json.total || items.length);
-        } else {
-          throw new Error('Failed to fetch dictionary');
+          setLoading(false);
+          return;
         }
       }
+      throw new Error('API unavailable');
     } catch (e) {
-      console.warn("API fallback for dictionary -> loading local static JSON dataset", e);
+      // Fallback static fetch
       try {
         const staticUrl = lang === 'zh' ? '/data/chinese_lexicon_10k.json' : '/data/english_lexicon_10k.json';
         const res = await fetch(staticUrl);
         if (res.ok) {
           const allData: any[] = await res.json();
-          const qLower = query.trim().toLowerCase();
-
-          let filtered = allData.filter((item: any) => {
-            const matchTopic = selectedTopic === 'all' || item.topic === selectedTopic;
-            const termMatch = (item.term || item.hanzi || '').toLowerCase().includes(qLower);
-            const pinyinMatch = (item.pinyin || item.ipa || '').toLowerCase().includes(qLower);
-            const meaningMatch = (item.meaning_vi || '').toLowerCase().includes(qLower);
-            return matchTopic && (termMatch || pinyinMatch || meaningMatch);
-          });
-
-          if (activeTab === 'two_hanzi' && lang === 'zh') {
-            const twoHanzi = filtered.filter((item: any) => (item.term || item.hanzi || '').length === 2);
-            setTwoHanziWords(twoHanzi.slice(0, 100));
-            setTotalCount(twoHanzi.length);
-          } else {
-            setWords(filtered.slice(0, 100));
-            setTotalCount(filtered.length);
-          }
+          cacheRef.current[lang] = allData;
+          filterAndSetData(allData);
         }
       } catch (err) {
-        console.error("Failed to load static lexicon dataset", err);
+        console.error("Static dataset load error", err);
       }
     } finally {
       setLoading(false);
